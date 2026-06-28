@@ -6,6 +6,8 @@ This project demonstrates an end-to-end Data Warehouse built using the Medallion
 The goal is to understand how raw data is transformed into business-ready insights.
 
 ---
+<img width="1024" height="594" alt="image" src="https://github.com/user-attachments/assets/d82890d1-14ba-4e20-aad5-07a80bcb0718" />
+
 
 ## Project Overview
 
