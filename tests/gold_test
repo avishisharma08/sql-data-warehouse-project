@@ -1,0 +1,25 @@
+-- ==============================================
+-- Quality Checks: gold.dim_customers
+-- ==============================================
+
+-- Check 1: Duplicate customer_key nahi hone chahiye
+SELECT customer_key, COUNT(*) 
+FROM gold.dim_customers
+GROUP BY customer_key
+HAVING COUNT(*) > 1;
+
+-- Check 2: NULL values in important columns
+SELECT *
+FROM gold.dim_customers
+WHERE customer_id IS NULL
+   OR customer_number IS NULL
+   OR first_name IS NULL;
+
+-- Check 3: Gender sirf valid values hone chahiye
+SELECT DISTINCT gender
+FROM gold.dim_customers;
+-- Expected: 'M', 'F', 'n/a' only
+
+-- Check 4: Total record count
+SELECT COUNT(*) AS total_customers
+FROM gold.dim_customers;
