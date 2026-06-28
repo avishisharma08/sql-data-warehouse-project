@@ -23,3 +23,71 @@ FROM gold.dim_customers;
 -- Check 4: Total record count
 SELECT COUNT(*) AS total_customers
 FROM gold.dim_customers;
+-- ==============================================
+-- Quality Checks: gold.dim_products
+-- ==============================================
+
+-- Check 1: Duplicate product_key nahi hone chahiye
+SELECT product_key, COUNT(*)
+FROM gold.dim_products
+GROUP BY product_key
+HAVING COUNT(*) > 1;
+
+-- Check 2: NULL values check
+SELECT *
+FROM gold.dim_products
+WHERE product_number IS NULL
+   OR product_name IS NULL;
+
+-- Check 3: Cost negative nahi hona chahiye
+SELECT *
+FROM gold.dim_products
+WHERE cost < 0 OR cost IS NULL;
+
+-- Check 4: Total record count
+SELECT COUNT(*) AS total_products
+FROM gold.dim_products;
+-- ==============================================
+-- Quality Checks: gold.fact_sales
+-- ==============================================
+
+-- Check 1: Foreign Key Integrity - Orphan products
+SELECT *
+FROM gold.fact_sales f
+LEFT JOIN gold.dim_products p
+    ON p.product_key = f.product_key
+WHERE p.product_key IS NULL;
+
+-- Check 2: Foreign Key Integrity - Orphan customers
+SELECT *
+FROM gold.fact_sales f
+LEFT JOIN gold.dim_customers c
+    ON c.customer_key = f.customer_key
+WHERE c.customer_key IS NULL;
+
+-- Check 3: Sales amount negative nahi hona chahiye
+SELECT *
+FROM gold.fact_sales
+WHERE sales_amount < 0 OR sales_amount IS NULL;
+
+-- Check 4: Price aur quantity negative nahi hone chahiye
+SELECT *
+FROM gold.fact_sales
+WHERE price < 0 OR quantity < 0;
+
+-- Check 5: Order date future mein nahi honi chahiye
+SELECT *
+FROM gold.fact_sales
+WHERE order_date > CURRENT_DATE;
+
+-- Check 6: Shipping date order date se pehle nahi honi chahiye
+SELECT *
+FROM gold.fact_sales
+WHERE sls_ship_dt < sls_order_dt;
+
+-- Check 7: Total sales summary
+SELECT 
+    COUNT(*) AS total_orders,
+    SUM(sales_amount) AS total_revenue,
+    AVG(sales_amount) AS avg_order_value
+FROM gold.fact_sales;
