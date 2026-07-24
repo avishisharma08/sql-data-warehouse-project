@@ -116,3 +116,20 @@ The implementation and improvements are being done as part of my learning journe
 
 If you have suggestions or feedback, feel free to connect or open an issue.
 
+## Python Analysis Layer
+
+This project now includes a Python analysis layer on top of the SQL data warehouse.
+
+**What it does:**
+- Connects directly to the PostgreSQL data warehouse (Gold layer) using `sqlalchemy` and `psycopg2`
+- Pulls data (e.g. `fact_sales`) into Pandas DataFrames for analysis
+- Calculates business metrics (e.g. total sales, top products, monthly trends)
+- Lays the groundwork for future data quality checks and visualizations
+
+**Folder:** `python-analysis/`
+- `connect_db.py` — connects to the warehouse and runs a sample query
+- `.env` — stores database credentials locally (not pushed to GitHub, see `.gitignore`)
+
+**Tech used:** Python, Pandas, SQLAlchemy, psycopg2, python-dotenv
+
+**Why this matters:** This layer turns the warehouse from "just a database" into something that can be queried and analyzed programmatically — the same workflow used in real data analyst/data engineer roles.
