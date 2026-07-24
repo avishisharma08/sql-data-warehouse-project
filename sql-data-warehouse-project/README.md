@@ -5,6 +5,7 @@ Welcome to the **Data Warehouse and Analytics Project** repository! 🚀
 This project demonstrates a comprehensive data warehousing and analytics solution, from building a data warehouse to generating actionable insights. Designed as a portfolio project, it highlights industry best practices in data engineering and analytics.
 
 ---
+
 ## 🏗️ Data Architecture
 
 The data architecture for this project follows Medallion Architecture **Bronze**, **Silver**, and **Gold** layers:
@@ -120,3 +121,20 @@ Let's stay in touch! Feel free to connect with me on the following platforms:
 [![Newsletter](https://img.shields.io/badge/Newsletter-FF5722?style=for-the-badge&logo=substack&logoColor=white)](https://bit.ly/BaraaNewsletter)
 [![PayPal](https://img.shields.io/badge/PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/baraasalkini)
 [![Join](https://img.shields.io/badge/Join-FF0000?style=for-the-badge&logo=youtube&logoColor=white)](https://www.youtube.com/@datawithbaraa)
+## Python Analysis Layer
+
+This project now includes a Python analysis layer on top of the SQL data warehouse.
+
+**What it does:**
+- Connects directly to the PostgreSQL data warehouse (Gold layer) using `sqlalchemy` and `psycopg2`
+- Pulls data (e.g. `fact_sales`) into Pandas DataFrames for analysis
+- Calculates business metrics (e.g. total sales, top products, monthly trends)
+- Lays the groundwork for future data quality checks and visualizations
+
+**Folder:** `python-analysis/`
+- `connect_db.py` — connects to the warehouse and runs a sample query
+- `.env` — stores database credentials locally (not pushed to GitHub, see `.gitignore`)
+
+**Tech used:** Python, Pandas, SQLAlchemy, psycopg2, python-dotenv
+
+**Why this matters:** This layer turns the warehouse from "just a database" into something that can be queried and analyzed programmatically — the same workflow used in real data analyst/data engineer roles.
