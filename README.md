@@ -17,7 +17,7 @@ It covers:
 - Data ingestion from multiple sources
 - Data cleaning and transformation
 - Data modeling for analytics
-- Preparing data for reporting and dashboards
+
 
 ---
 
