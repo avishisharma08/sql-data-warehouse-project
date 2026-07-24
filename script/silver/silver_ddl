@@ -1,0 +1,200 @@
+-- =========================================================================
+-- DDL Script: Create Silver Views / Tables
+-- =========================================================================
+-- Script Purpose:
+--   This script creates the structures for the Silver layer in the data warehouse.
+--   The Silver layer represents the cleaned, conformed, and deduplicated data.
+--
+--   Each model performs validation, handles nulls, and standardizes formats
+--   from the Bronze layer to produce an enterprise-ready dataset.
+--
+-- Usage:
+--   - These tables/views are used as the foundation for the Gold layer.
+-- =========================================================================
+ -- 2. This builds a fresh table with a clean 1-to-1 copy from Bronze
+    CREATE TABLE silver.stg_customers AS
+    SELECT 
+        NULLIF(TRIM(cst_id), '')::INT AS cst_id,
+        TRIM(cst_key) AS cst_key,
+        TRIM(cst_firstname) AS cst_firstname,
+        TRIM(cst_lastname) AS cst_lastname,
+        UPPER(TRIM(cst_marital_status)) AS cst_marital_status,
+        UPPER(TRIM(cst_gndr)) AS cst_gndr,
+        NULLIF(TRIM(cst_create_date), '')::DATE AS cst_create_date
+    FROM bronze.stg_customers; -- Make sure NO other tables are listed here!
+
+    -- (Your other silver tables like sales and producer go here...)
+
+END;
+$$;
+CALL silver.load_silver_layer();
+SELECT * FROM silver.stg_customers WHERE cst_id = 11101; -- Replace with your specific cst_id
+TRUNCATE TABLE silver.stg_producer;
+
+INSERT INTO silver.stg_producer
+(
+    prd_id,
+    prd_key,
+    prd_name,
+    prd_cost,
+    prd_line,
+    prd_start_dt,
+    prd_end_dt
+)
+SELECT 
+    NULLIF(TRIM(prd_id), '')::INT AS prd_id,
+    
+    -- Cleaning prd_key using substring just like your screenshot
+    SUBSTRING(TRIM(prd_key), 7, LENGTH(TRIM(prd_key))) AS prd_key,
+    
+    TRIM(prd_name) AS prd_name,
+    
+    -- Coalescing cost safely
+    COALESCE(NULLIF(TRIM(prd_cost), '')::NUMERIC, 0.0) AS prd_cost,
+    
+    -- Mapping the product line
+    CASE UPPER(TRIM(prd_line))
+        WHEN 'M' THEN 'Mountain'
+        WHEN 'R' THEN 'River'
+        WHEN 'S' THEN 'Other'
+        WHEN 'T' THEN 'Tourist'
+        ELSE 'N/A'
+    END AS prd_line,
+    
+    NULLIF(TRIM(prd_start_dt), '')::DATE AS prd_start_dt,
+    
+    -- Calculating the proper end date with the fixed comma separation
+    (LEAD(NULLIF(TRIM(prd_start_dt), '')::DATE) OVER (
+        PARTITION BY TRIM(prd_key) 
+        ORDER BY NULLIF(TRIM(prd_start_dt), '')::DATE
+    ) - INTERVAL '1 day')::DATE AS prd_end_dt
+
+FROM bronze.stg_producer;
+DROP TABLE IF EXISTS silver.stg_producer;
+
+CREATE TABLE silver.stg_producer
+(
+    prd_id          INT,
+    cat_id          VARCHAR(50),
+    prd_key         VARCHAR(50),
+    prd_name        VARCHAR(100),
+    prd_cost        NUMERIC(10,2),
+    prd_line        VARCHAR(50),
+    prd_start_dt    DATE,
+    prd_end_dt      DATE
+);
+---here we have the sales table being loaded with the information
+INSERT INTO silver.stg_sales
+(
+    sls_ord_id,
+    sls_prd_key,
+    sls_cust_id,
+    sls_order_dt,
+    sls_ship_dt,
+    sls_due_dt,
+    sls_sales,
+    sls_quantity,    -- Adding these to ensure your SELECT pairs 
+    sls_price   -- perfectly with your target table columns
+)
+SELECT 
+    NULLIF(TRIM(sls_ord_id), '') AS sls_ord_num,
+    NULLIF(TRIM(sls_prd_key), '') AS sls_prd_key,
+    NULLIF(TRIM(sls_cust_id), '')::INT AS sls_cust_id,
+    
+    -- 1. Transform Order Date (Handling 0 or malformed 8-digit strings)
+    CASE 
+        WHEN NULLIF(TRIM(sls_order_dt), '') IS NULL OR NULLIF(TRIM(sls_order_dt), '') = '0' OR LENGTH(TRIM(sls_order_dt)) != 8 THEN NULL
+        ELSE TO_DATE(TRIM(sls_order_dt), 'YYYYMMDD')
+    END AS sls_order_dt,
+    
+    -- 2. Transform Shipping Date
+    CASE 
+        WHEN NULLIF(TRIM(sls_ship_dt), '') IS NULL OR NULLIF(TRIM(sls_ship_dt), '') = '0' OR LENGTH(TRIM(sls_ship_dt)) != 8 THEN NULL
+        ELSE TO_DATE(TRIM(sls_ship_dt), 'YYYYMMDD')
+    END AS sls_ship_dt,
+    
+    -- 3. Transform Due Date
+    CASE 
+        WHEN NULLIF(TRIM(sls_due_dt), '') IS NULL OR NULLIF(TRIM(sls_due_dt), '') = '0' OR LENGTH(TRIM(sls_due_dt)) != 8 THEN NULL
+        ELSE TO_DATE(TRIM(sls_due_dt), 'YYYYMMDD')
+    END AS sls_due_dt,
+    
+    -- 4. Clean and Recalculate Sales if bad/null (Sales = Qty * |Price|)
+    CASE 
+        WHEN NULLIF(TRIM(sls_sales), '') IS NULL 
+             OR NULLIF(TRIM(sls_sales), '')::NUMERIC <= 0 
+             OR NULLIF(TRIM(sls_sales), '')::NUMERIC != (NULLIF(TRIM(sls_qty), '')::INT * ABS(NULLIF(TRIM(sls_price), '')::NUMERIC))
+        THEN (NULLIF(TRIM(sls_quantity), '')::INT * ABS(NULLIF(TRIM(sls_price), '')::NUMERIC))
+        ELSE NULLIF(TRIM(sls_sales), '')::NUMERIC
+    END AS sls_sales,
+    
+    -- 5. Include raw baseline elements for target structure consistency
+    COALESCE(NULLIF(TRIM(sls_qty), '')::INT, 0) AS sls_qty,
+    COALESCE(NULLIF(TRIM(sls_price), '')::NUMERIC, 0.0) AS sls_price
+
+FROM bronze.stg_sales;
+# for erp tables
+ROP TABLE IF EXISTS silver.erp_cust_az12;
+
+CREATE TABLE silver.erp_cust_az12 (
+    cid   VARCHAR(50),
+    bdate DATE,
+    gen   VARCHAR(20)
+);
+INSERT INTO silver.erp_cust_az12 (cid, bdate, gen)
+SELECT 
+    -- 1. Strip 'NAS' prefix if it exists at the start of the customer ID
+    CASE 
+        WHEN TRIM(cid) LIKE 'NAS%' THEN SUBSTRING(TRIM(cid) FROM 4)
+        ELSE NULLIF(TRIM(cid), '')
+    END AS cid,
+    
+    -- 2. Handle Birthdates (If the birthdate is in the future, set it to NULL)
+    CASE 
+        WHEN bdate::DATE > CURRENT_DATE THEN NULL
+        ELSE bdate::DATE
+    END AS bdate,
+    
+    -- 3. Standardize Genders into clean lookups
+    CASE 
+        WHEN UPPER(TRIM(gen)) IN ('F', 'FEMALE') THEN 'Female'
+        WHEN UPPER(TRIM(gen)) IN ('M', 'MALE')   THEN 'Male'
+        ELSE 'n/a'
+    END AS gen
+
+FROM bronze.erp_cust_az12; -- Double check if your bronze table has a prefix or is just erp_cust_az12
+DROP TABLE IF EXISTS silver.erp_loc_a101;
+
+CREATE TABLE silver.erp_loc_a101 (
+    cid   VARCHAR(50),
+    cntry VARCHAR(100)
+);
+INSERT INTO silver.erp_loc_a101 (cid, cntry)
+SELECT 
+    -- 1. Remove hyphens completely from the customer ID string
+    REPLACE(TRIM(cid), '-', '') AS cid,
+    
+    -- 2. Standardize abbreviation codes into clean full names
+    CASE 
+        WHEN TRIM(cntry) = 'DE' THEN 'Germany'
+        WHEN TRIM(cntry) IN ('US', 'USA') THEN 'United States'
+        WHEN NULLIF(TRIM(cntry), '') IS NULL THEN 'n/a'
+        ELSE TRIM(cntry)
+    END AS cntry
+
+FROM bronze.erp_loc_a101;
+DROP TABLE IF EXISTS silver.erp_px_cat_g1v2;
+
+CREATE TABLE silver.erp_px_cat_g1v2 (
+    id          VARCHAR(50),
+    cat         VARCHAR(50),
+    subcat      VARCHAR(50),
+    maintenance VARCHAR(50)
+);
+INSERT INTO silver.erp_px_cat_g1v2 (id, cat, subcat)
+SELECT 
+    NULLIF(TRIM(id), '') AS id,
+    NULLIF(TRIM(cat), '') AS cat,                -- Cleans up the unwanted spaces checked in the video
+    NULLIF(TRIM(subcat), '') AS subcat         -- Cleans up the unwanted spaces checked in the video
+   -- Cleans up the unwanted spaces checked in the video
+FROM bronze.erp_px_cat_giv2;

@@ -1,0 +1,92 @@
+______________________________________________________
+#here we are loading the data into the table 
+CREATE OR REPLACE PROCEDURE silver.load_silver_layer()
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RAISE NOTICE '==================================================';
+    RAISE NOTICE 'Starting Silver Layer Data Load Process';
+    RAISE NOTICE '==================================================';
+
+    ---------------------------------------------------------------------------
+    -- 1. Load: silver.stg_details (CRM Sales Data)
+    ---------------------------------------------------------------------------
+    RAISE NOTICE '>> Loading silver.stg_details...';
+    
+    DROP TABLE IF EXISTS silver.stg_sales;
+    CREATE TABLE silver.stg_sales (
+        sls_ord_id   VARCHAR(50),
+        sls_prd_key  VARCHAR(50),
+        sls_cust_id  INT,
+        sls_order_dt DATE,
+        sls_ship_dt  DATE,
+        sls_due_dt   DATE,
+        sls_sales    NUMERIC(18, 2),
+        sls_qty      INT,
+        sls_price    NUMERIC(18, 2)
+    );
+
+    INSERT INTO silver.stg_sales
+    (
+        sls_ord_id, sls_prd_key, sls_cust_id, sls_order_dt, 
+        sls_ship_dt, sls_due_dt, sls_sales, sls_qty, sls_price
+    )
+    SELECT 
+        NULLIF(TRIM(sls_odr_id), '') AS sls_ord_id,
+        NULLIF(TRIM(sls_prd_key), '') AS sls_prd_key,
+        NULLIF(TRIM(sales_csr_id), '')::INT AS sls_cust_id,
+        CASE 
+            WHEN NULLIF(TRIM(sales_ord_date), '') IS NULL OR NULLIF(TRIM(sales_ord_date), '') = '0' OR LENGTH(TRIM(sales_ord_date)) != 8 THEN NULL
+            ELSE TO_DATE(TRIM(sales_ord_date), 'YYYYMMDD')
+        END AS sls_order_dt,
+        CASE 
+            WHEN NULLIF(TRIM(sls_ship_dt), '') IS NULL OR NULLIF(TRIM(sls_ship_dt), '') = '0' OR LENGTH(TRIM(sls_ship_dt)) != 8 THEN NULL
+            ELSE TO_DATE(TRIM(sls_ship_dt), 'YYYYMMDD')
+        END AS sls_ship_dt,
+        sls_due_dt::DATE AS sls_due_dt,
+        CASE 
+            WHEN NULLIF(TRIM(sls_sales), '') IS NULL 
+                 OR NULLIF(TRIM(sls_sales), '')::NUMERIC <= 0 
+                 OR NULLIF(TRIM(sls_sales), '')::NUMERIC != (sls_quantity::NUMERIC * ABS(sls_price::NUMERIC))
+            THEN (sls_quantity::NUMERIC * ABS(sls_price::NUMERIC))
+            ELSE NULLIF(TRIM(sls_sales), '')::NUMERIC
+        END AS sls_sales,
+        COALESCE(sls_quantity, 0) AS sls_qty,
+        CASE 
+            WHEN sls_price IS NULL OR sls_price <= 0 
+            THEN (
+                CASE 
+                    WHEN NULLIF(TRIM(sls_sales), '') IS NULL OR NULLIF(TRIM(sls_sales), '')::NUMERIC <= 0 
+                    THEN (sls_quantity::NUMERIC * ABS(sls_price::NUMERIC)) 
+                    ELSE NULLIF(TRIM(sls_sales), '')::NUMERIC 
+                END / NULLIF(sls_quantity, 0)::NUMERIC
+            )
+            ELSE sls_price::NUMERIC
+        END AS sls_price
+    FROM bronze.stg_sales;
+
+
+    ---------------------------------------------------------------------------
+    -- 2. Load: silver.erp_cust_az12 (ERP Customer Data)
+    ---------------------------------------------------------------------------
+    RAISE NOTICE '>> Loading silver.erp_cust_az12...';
+    
+    DROP TABLE IF EXISTS silver.erp_cust_az12;
+    CREATE TABLE silver.erp_cust_az12 (
+        cid   VARCHAR(50),
+        bdate DATE,
+        gen   VARCHAR(20)
+    );
+
+    INSERT INTO silver.erp_cust_az12 (cid, bdate, gen)
+    SELECT 
+        CASE 
+            WHEN TRIM(cid) LIKE 'NAS%' THEN SUBSTRING(TRIM(cid) FROM 4)
+            ELSE NULLIF(TRIM(cid), '')
+        END AS cid,
+        CASE 
+            WHEN bdate::DATE > CURRENT_DATE THEN NULL
+            ELSE bdate::DATE
+        END AS bdate,
+        CASE 
+            WHEN UPPER(TRIM(gen)) IN ('F', 'FEMALE') THEN 'Female'
